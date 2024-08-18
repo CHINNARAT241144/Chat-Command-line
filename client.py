@@ -36,3 +36,4 @@ class ChatClient:
 if __name__ == "__main__":
     client = ChatClient()
     asyncio.run(client.main())
+    
