@@ -43,22 +43,27 @@ class ChatServer:
                     if room_name not in self.rooms:
                         self.rooms[room_name] = set()
                     if current_room:
+                        await self.broadcast_leave(username, current_room)
                         self.rooms[current_room].remove((username, writer))
                     current_room = room_name
                     self.rooms[room_name].add((username, writer))
                     writer.write(f"Room '{room_name}' created and joined.\n".encode())
+                    await self.broadcast_join(username, current_room)
                 elif message.lower().startswith('join '):
                     room_name = message.split(' ', 1)[1]
                     if room_name in self.rooms:
                         if current_room:
+                            await self.broadcast_leave(username, current_room)
                             self.rooms[current_room].remove((username, writer))
                         current_room = room_name
                         self.rooms[room_name].add((username, writer))
                         writer.write(f"Joined room '{room_name}'.\n".encode())
+                        await self.broadcast_join(username, current_room)
                     else:
                         writer.write(f"Room '{room_name}' does not exist.\n".encode())
                 elif message.lower() == 'leave':
                     if current_room:
+                        await self.broadcast_leave(username, current_room)
                         self.rooms[current_room].remove((username, writer))
                         writer.write(f"Left room '{current_room}'.\n".encode())
                         current_room = None
@@ -77,6 +82,7 @@ class ChatServer:
             pass
         finally:
             if current_room:
+                await self.broadcast_leave(username, current_room)
                 self.rooms[current_room].remove((username, writer))
                 if not self.rooms[current_room]:
                     del self.rooms[current_room]
@@ -87,6 +93,22 @@ class ChatServer:
 
     def get_timestamp(self):
         return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    async def broadcast_join(self, username, room):
+        timestamp = self.get_timestamp()
+        message = f"{timestamp} {username} has joined the room.\n"
+        await self.broadcast_to_room(message, room, exclude_username=username)
+
+    async def broadcast_leave(self, username, room):
+        timestamp = self.get_timestamp()
+        message = f"{timestamp} {username} has left the room.\n"
+        await self.broadcast_to_room(message, room, exclude_username=username)
+
+    async def broadcast_to_room(self, message, room, exclude_username=None):
+        for name, writer in self.rooms[room]:
+            if name != exclude_username:
+                writer.write(message.encode())
+                await writer.drain()
 
     async def main(self):
         server = await asyncio.start_server(self.handle_client, '127.0.0.1', 8888)
